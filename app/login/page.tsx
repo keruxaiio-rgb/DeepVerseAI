@@ -2,7 +2,7 @@
 
 import React, { useState } from "react";
 import { auth, db } from "../../firebase";
-import { signInWithEmailAndPassword, signInWithPopup, GoogleAuthProvider, OAuthProvider, GithubAuthProvider } from "firebase/auth";
+import { signInWithEmailAndPassword, signInWithPopup, signInWithRedirect, getRedirectResult, GoogleAuthProvider, OAuthProvider, GithubAuthProvider } from "firebase/auth";
 import { doc, setDoc } from "firebase/firestore";
 import type { User } from "../../types/api";
 
@@ -114,9 +114,8 @@ export default function LoginPage() {
   };
 
   const handleAppleLogin = async () => {
-    const provider = new OAuthProvider('apple.com');
     try {
-      const result = await signInWithPopup(auth, provider);
+      const result = await signInWithPopup(auth, new OAuthProvider('apple.com'));
       const user = result.user;
       // Save user to Firestore
       const userDoc: User = {
@@ -133,9 +132,9 @@ export default function LoginPage() {
       };
       await setDoc(doc(db, "users", user.uid), userDoc);
       window.location.href = '/chat';
-    } catch (error) {
+    } catch (error: any) {
       console.error("Apple login error:", error);
-      alert("Apple login failed");
+      alert(`Apple login failed: ${error.message}`);
     }
   };
 

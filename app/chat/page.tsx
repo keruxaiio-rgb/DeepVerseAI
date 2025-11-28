@@ -3,6 +3,10 @@
 import React, { useEffect, useRef, useState } from "react";
 import type { ApiPayload, ApiResponse, Message } from "@/types/api";
 import { SubscriptionService, AccessControl } from "@/lib/subscriptionService";
+import { auth, db } from "../../firebase";
+import { onAuthStateChanged, signOut } from "firebase/auth";
+import { doc, getDoc } from "firebase/firestore";
+import type { User } from "../../types/api";
 
 const uid = (prefix = "") => prefix + Math.random().toString(36).slice(2, 9);
 
@@ -282,16 +286,26 @@ export default function ChatPage() {
     if (convRef.current) convRef.current.scrollTop = convRef.current.scrollHeight + 200;
   }, [messages, promptQueue]);
 
-  // Check subscription access on component mount
+  // Check authentication and subscription access on component mount
   useEffect(() => {
-    const checkAccess = async () => {
-      const userId = process.env.NEXT_PUBLIC_USER_EMAIL;
-      if (!userId) {
+    const unsubscribe = onAuthStateChanged(auth, async (user) => {
+      if (!user) {
         window.location.href = '/login';
         return;
       }
 
-      const accessLevel = await SubscriptionService.getAccessLevel(userId);
+      // Get user data from Firestore
+      const userDocRef = doc(db, "users", user.uid);
+      const userDocSnap = await getDoc(userDocRef);
+      if (!userDocSnap.exists()) {
+        window.location.href = '/login';
+        return;
+      }
+
+      const userData = userDocSnap.data() as User;
+
+      // Check subscription access
+      const accessLevel = await SubscriptionService.getAccessLevel(user.email || '');
       if (accessLevel === 'free') {
         window.location.href = '/upgrade';
         return;
@@ -302,13 +316,13 @@ export default function ChatPage() {
       }
 
       // Check for expiration notifications
-      const expirationCheck = await SubscriptionService.checkExpirationAndNotify(userId);
+      const expirationCheck = await SubscriptionService.checkExpirationAndNotify(user.email || '');
       if (expirationCheck.shouldNotify) {
         alert(`Your subscription expires in ${expirationCheck.daysUntilExpiry} days. Please renew to avoid service interruption.`);
       }
-    };
+    });
 
-    checkAccess();
+    return () => unsubscribe();
   }, []);
 
   const initialAskPrompt = "What theological or Bible question would you like answered?";
@@ -744,8 +758,9 @@ export default function ChatPage() {
               </div>
             </div>
 
-            <button style={styles.logoutButton} onClick={() => {
+            <button style={styles.logoutButton} onClick={async () => {
               if (confirm('Are you sure you want to log out?')) {
+                await signOut(auth);
                 window.location.href = '/login';
               }
             }}>

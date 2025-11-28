@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect } from "react";
 import { auth, db } from "../../firebase";
-import { createUserWithEmailAndPassword, signInWithPopup, GoogleAuthProvider, OAuthProvider } from "firebase/auth";
+import { createUserWithEmailAndPassword, signInWithPopup, GoogleAuthProvider, OAuthProvider, GithubAuthProvider } from "firebase/auth";
 import { doc, setDoc } from "firebase/firestore";
 import type { User } from "../../types/api";
 
@@ -58,6 +58,10 @@ const styles: Record<string, React.CSSProperties> = {
   },
   appleBtn: {
     background: "#000",
+    color: "white",
+  },
+  githubBtn: {
+    background: "#24292e",
     color: "white",
   },
   link: {
@@ -152,6 +156,32 @@ export default function SignupPage() {
     }
   };
 
+  const handleGitHubSignup = async () => {
+    const provider = new GithubAuthProvider();
+    try {
+      const result = await signInWithPopup(auth, provider);
+      const user = result.user;
+      // Save user to Firestore
+      const userDoc: User = {
+        id: user.uid,
+        email: user.email || "",
+        role: user.email === 'kerux.ai.io@gmail.com' ? 'admin' :
+              user.email === process.env.NEXT_PUBLIC_ADMIN_EMAIL ? 'admin' :
+              user.email === process.env.NEXT_PUBLIC_DEMO_EMAIL ? 'demo' : 'free',
+        subscriptionStatus: user.email === 'kerux.ai.io@gmail.com' ? 'active' : 'none',
+        referralLimit: user.email === 'kerux.ai.io@gmail.com' ? 999999 : 50, // Unlimited for creator
+        activeReferrals: 0,
+        fullName: user.displayName || "",
+        lastLogin: new Date(),
+      };
+      await setDoc(doc(db, "users", user.uid), userDoc);
+      window.location.href = '/chat';
+    } catch (error) {
+      console.error("GitHub signup error:", error);
+      alert("GitHub signup failed");
+    }
+  };
+
   return (
     <div style={styles.container}>
       <div style={styles.form}>
@@ -185,6 +215,9 @@ export default function SignupPage() {
         </button>
         <button style={{ ...styles.button, ...styles.appleBtn }} onClick={handleAppleSignup}>
           Sign Up with Apple
+        </button>
+        <button style={{ ...styles.button, ...styles.githubBtn }} onClick={handleGitHubSignup}>
+          Sign Up with GitHub
         </button>
         <p>
           Already have an account? <span style={styles.link} onClick={() => window.location.href = '/login'}>Login</span>

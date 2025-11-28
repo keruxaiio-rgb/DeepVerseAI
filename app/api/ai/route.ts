@@ -27,11 +27,10 @@ function checkRateLimit(ip: string): boolean {
   return true;
 }
 
-// Get user ID from request (in production, this would come from authentication)
-function getUserId(req: NextRequest): string | null {
-  // For demo purposes, we'll use email from environment
-  // In production, this would come from JWT token or session
-  return process.env.NEXT_PUBLIC_USER_EMAIL || null;
+// Get user email from custom header (set by client)
+function getUserEmail(req: NextRequest): string | null {
+  const userEmail = req.headers.get('x-user-email');
+  return userEmail;
 }
 
 export async function POST(req: NextRequest) {
@@ -52,15 +51,15 @@ export async function POST(req: NextRequest) {
     const payload = body; // typed earlier as ApiPayload
 
     // Check access control for AI features
-    const userId = getUserId(req);
-    if (!userId) {
+    const userEmail = getUserEmail(req);
+    if (!userEmail) {
       return NextResponse.json(
         { error: "Authentication required" },
         { status: 401 }
       );
     }
 
-    const accessCheck = await AccessControl.requireAI(userId);
+    const accessCheck = await AccessControl.requireAI(userEmail);
     if (!accessCheck.allowed) {
       return NextResponse.json(
         { error: accessCheck.message || "Access denied" },

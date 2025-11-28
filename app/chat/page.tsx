@@ -269,6 +269,7 @@ export default function ChatPage() {
   const [currentConversationId, setCurrentConversationId] = useState<string | null>(null);
   const [showUpgradePanel, setShowUpgradePanel] = useState(false);
   const [showProfilePanel, setShowProfilePanel] = useState(false);
+  const [currentUser, setCurrentUser] = useState<{email?: string | null} | null>(null);
   const convRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
@@ -293,6 +294,8 @@ export default function ChatPage() {
         window.location.href = '/login';
         return;
       }
+
+      setCurrentUser(user);
 
       // Get user data from Firestore
       const userDocRef = doc(db, "users", user.uid);
@@ -343,7 +346,10 @@ export default function ChatPage() {
     try {
       const res = await fetch("/api/ai", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          "x-user-email": currentUser?.email || "",
+        },
         body: JSON.stringify(payload),
       });
 

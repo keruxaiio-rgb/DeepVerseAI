@@ -81,9 +81,24 @@ export default function LoginPage() {
       const user = userCredential.user;
       // Check role from Firestore or set default
       window.location.href = '/chat';
-    } catch (error) {
+    } catch (error: unknown) {
       console.error("Login error:", error);
-      alert("Login failed");
+      let errorMessage = "Login failed";
+      if (error && typeof error === 'object' && 'code' in error) {
+        const authError = error as { code: string };
+        if (authError.code === 'auth/user-not-found') {
+          errorMessage = "No account found with this email. Please sign up first.";
+        } else if (authError.code === 'auth/wrong-password') {
+          errorMessage = "Incorrect password. Please try again.";
+        } else if (authError.code === 'auth/invalid-email') {
+          errorMessage = "Please enter a valid email address.";
+        } else if (authError.code === 'auth/user-disabled') {
+          errorMessage = "This account has been disabled.";
+        } else if (authError.code === 'auth/too-many-requests') {
+          errorMessage = "Too many failed login attempts. Please try again later.";
+        }
+      }
+      alert(errorMessage);
     }
   };
 
@@ -132,9 +147,13 @@ export default function LoginPage() {
       };
       await setDoc(doc(db, "users", user.uid), userDoc);
       window.location.href = '/chat';
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error("Apple login error:", error);
-      alert(`Apple login failed: ${error.message}`);
+      let errorMessage = "Apple login failed";
+      if (error && typeof error === 'object' && 'message' in error) {
+        errorMessage = `Apple login failed: ${String(error.message)}`;
+      }
+      alert(errorMessage);
     }
   };
 

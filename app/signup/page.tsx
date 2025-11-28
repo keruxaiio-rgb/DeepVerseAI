@@ -98,9 +98,22 @@ export default function SignupPage() {
       };
       await setDoc(doc(db, "users", user.uid), userDoc);
       window.location.href = '/chat';
-    } catch (error) {
+    } catch (error: unknown) {
       console.error("Signup error:", error);
-      alert("Signup failed");
+      let errorMessage = "Signup failed";
+      if (error && typeof error === 'object' && 'code' in error) {
+        const authError = error as { code: string };
+        if (authError.code === 'auth/email-already-in-use') {
+          errorMessage = "This email is already registered. Please try logging in instead.";
+        } else if (authError.code === 'auth/weak-password') {
+          errorMessage = "Password should be at least 6 characters long.";
+        } else if (authError.code === 'auth/invalid-email') {
+          errorMessage = "Please enter a valid email address.";
+        } else if (authError.code === 'auth/network-request-failed') {
+          errorMessage = "Network error. Please check your connection and try again.";
+        }
+      }
+      alert(errorMessage);
     }
   };
 

@@ -1,0 +1,56 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Users collection - users can read/write their own data
+    match /users/{userId} {
+      allow read, write: if request.auth != null && request.auth.uid == userId;
+      // Allow admin to read all users
+      allow read: if request.auth != null &&
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
+    }
+
+    // Subscriptions collection - users can read/write their own subscriptions
+    match /subscriptions/{subscriptionId} {
+      allow read, write: if request.auth != null &&
+        resource.data.userId == request.auth.uid;
+      // Allow admin to manage all subscriptions
+      allow read, write: if request.auth != null &&
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
+    }
+
+    // Referrals collection - track referral relationships
+    match /referrals/{referralId} {
+      allow read, write: if request.auth != null;
+      // Allow public read for referral validation
+      allow read: if true;
+    }
+
+    // Referral bonuses collection
+    match /referralBonuses/{bonusId} {
+      allow read, write: if request.auth != null &&
+        (resource.data.referrerId == request.auth.uid || resource.data.refereeId == request.auth.uid);
+      // Allow admin to manage all bonuses
+      allow read, write: if request.auth != null &&
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
+    }
+
+    // Conversations collection (optional - for saving chat history)
+    match /conversations/{conversationId} {
+      allow read, write: if request.auth != null &&
+        resource.data.userId == request.auth.uid;
+    }
+
+    // Admin-only collections
+    match /admin/{document=**} {
+      allow read, write: if request.auth != null &&
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
+    }
+
+    // Public read collections (like app settings)
+    match /settings/{document} {
+      allow read: if true;
+      allow write: if request.auth != null &&
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
+    }
+  }
+}

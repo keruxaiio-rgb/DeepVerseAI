@@ -1,36 +1,209 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# DeepVerse AI - Theological AI Assistant
 
-## Getting Started
+A comprehensive AI-powered platform for pastors and Christians, providing advanced theological insights, sermon preparation, and professional presentation generation.
 
-First, run the development server:
+## ✨ Features
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+- **AI-Powered Theological Assistant**: Get seminary-level insights and biblical analysis
+- **Interactive Sermon Preparation**: Complete exegetical-hermeneutical study guides
+- **Professional PPTX Generation**: Auto-create sermon presentations
+- **Multi-Authentication**: Email, Google, Apple, and GitHub sign-in
+- **Referral Program**: Earn bonuses through user referrals
+- **Subscription Management**: Premium features with ₱299/month pricing
+- **Responsive Design**: Modern UI optimized for all devices
+
+## 🚀 Quick Start
+
+### Prerequisites
+- Node.js 18+
+- npm or yarn
+- Firebase project
+- OpenAI API key
+
+### Installation
+
+1. **Clone the repository**
+   ```bash
+   git clone <repository-url>
+   cd deepverse-ai
+   ```
+
+2. **Install dependencies**
+   ```bash
+   npm install
+   ```
+
+3. **Set up environment variables**
+   ```bash
+   cp .env.example .env.local
+   ```
+
+   Edit `.env.local` with your API keys and configuration.
+
+4. **Firebase Setup**
+   - Create a Firebase project
+   - Enable Authentication (Email/Password, Google, Apple)
+   - Enable Firestore Database
+   - Copy Firebase config to `.env.local`
+   - Deploy Firestore security rules:
+     ```bash
+     firebase deploy --only firestore:rules
+     ```
+
+5. **Run development server**
+   ```bash
+   npm run dev
+   ```
+
+   Open [http://localhost:3000](http://localhost:3000)
+
+## 📋 Environment Configuration
+
+Copy `.env.example` to `.env.local` and configure:
+
+### Required Variables
+```env
+OPENAI_API_KEY=your_openai_api_key
+NEXT_PUBLIC_FIREBASE_API_KEY=your_firebase_api_key
+NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN=your_project.firebaseapp.com
+NEXT_PUBLIC_FIREBASE_PROJECT_ID=your_project_id
+# ... other Firebase config
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+### Optional Variables
+```env
+NEXT_PUBLIC_SUBSCRIBED=false
+NEXT_PUBLIC_USER_NAME=Guest User
+```
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## 🏗️ Project Structure
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+```
+deepverse-ai/
+├── app/                    # Next.js app directory
+│   ├── api/               # API routes
+│   ├── chat/              # Main chat interface
+│   ├── login/             # Authentication pages
+│   ├── signup/            # Registration with referral tracking
+│   └── upgrade/           # Subscription management
+├── components/            # Reusable UI components
+├── lib/                   # Utility functions and prompts
+├── types/                 # TypeScript type definitions
+├── public/                # Static assets
+└── firestore.rules        # Firebase security rules
+```
 
-## Learn More
+## 🚀 Deployment
 
-To learn more about Next.js, take a look at the following resources:
+### Vercel (Recommended)
+1. **Connect GitHub repository** to Vercel
+2. **Add environment variables** in Vercel dashboard
+3. **Deploy automatically** on git push
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+### Manual Deployment
+```bash
+# Build for production
+npm run build
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+# Start production server
+npm start
+```
 
-## Deploy on Vercel
+## 🔧 Firebase Configuration
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+### Security Rules
+The `firestore.rules` file includes:
+- User data privacy (users can only access their own data)
+- Admin privileges for user management
+- Referral system data protection
+- Subscription data security
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+### Deploy Rules
+```bash
+firebase deploy --only firestore:rules
+```
+
+## 💳 Subscription & Payments
+
+Current implementation includes:
+- **₱299/month** premium subscription
+- **10% referral bonuses** (unlimited referrals)
+- UI ready for payment integration
+
+*Note: Payment processing requires additional integration with GCash/Bank APIs*
+
+## 📊 Features Overview
+
+### Core Functionality
+- **Theological Q&A**: AI-powered biblical analysis
+- **Sermon Preparation**: Step-by-step exegetical guides
+- **PPTX Generation**: Professional presentation creation
+- **Conversation History**: Persistent chat sessions
+
+### User Management
+- **Role-Based Access**: Free, Premium, Admin, Demo accounts
+- **Referral System**: Secure personalized referral keys
+- **Profile Dashboard**: Account management and analytics
+
+### Security Features
+- **Firebase Authentication**: Secure user authentication
+- **Data Encryption**: Protected API communications
+- **Input Validation**: Sanitized user inputs
+- **Rate Limiting**: API protection (recommended for production)
+
+## 🛠️ Development
+
+### Available Scripts
+```bash
+npm run dev      # Start development server
+npm run build    # Build for production
+npm start        # Start production server
+npm run lint     # Run ESLint
+```
+
+### Code Quality
+- **TypeScript**: Full type safety
+- **ESLint**: Code quality enforcement
+- **Prettier**: Code formatting (recommended)
+
+## 📈 Performance
+
+- **Static Generation**: Fast loading pages
+- **Optimized Images**: Automatic image optimization
+- **Code Splitting**: Efficient bundle sizes
+- **Caching**: Smart caching strategies
+
+## 🔒 Security Considerations
+
+- Environment variables properly secured
+- Firebase security rules implemented
+- Input sanitization and validation
+- HTTPS required for production
+- API rate limiting recommended
+
+## 🤝 Contributing
+
+1. Fork the repository
+2. Create a feature branch
+3. Make your changes
+4. Test thoroughly
+5. Submit a pull request
+
+## 📄 License
+
+This project is proprietary software for DeepVerse AI.
+
+## 🆘 Support
+
+For technical support or questions:
+- Check the documentation
+- Review Firebase console for errors
+- Ensure all environment variables are set
+
+## 🚀 Future Enhancements
+
+- Payment gateway integration
+- Advanced admin panel
+- Mobile app development
+- Multi-language support
+- Advanced analytics

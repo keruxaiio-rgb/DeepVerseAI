@@ -1,0 +1,16 @@
+services:
+  - type: web
+    name: deepverse-ai
+    env: node
+    plan: free
+    buildCommand: npm install && npm run build
+    startCommand: npm run start
+    envVars:
+      - key: NEXT_PUBLIC_PAYMONGO_PUBLIC_KEY
+        fromSecret: NEXT_PUBLIC_PAYMONGO_PUBLIC_KEY
+      - key: PAYMONGO_SECRET_KEY
+        fromSecret: PAYMONGO_SECRET_KEY
+      - key: NEXT_PUBLIC_APP_URL
+        fromSecret: NEXT_PUBLIC_APP_URL
+      - key: TRIAL_DAYS
+        value: "3"

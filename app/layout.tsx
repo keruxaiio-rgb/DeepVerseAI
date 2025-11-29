@@ -2,6 +2,8 @@
 import "./globals.css";
 import { Inter } from "next/font/google";
 import ErrorBoundary from "@/components/ErrorBoundary";
+import { AuthProvider } from "@/lib/authContext";
+import { SidebarProvider } from "@/lib/sidebarContext";
 
 const inter = Inter({ subsets: ["latin"] });
 
@@ -32,7 +34,11 @@ export default function RootLayout({
         }}
       >
         <ErrorBoundary>
-          {children}
+          <AuthProvider>
+            <SidebarProvider>
+              {children}
+            </SidebarProvider>
+          </AuthProvider>
         </ErrorBoundary>
       </body>
     </html>

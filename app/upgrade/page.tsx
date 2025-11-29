@@ -1,272 +1,134 @@
 "use client";
 
-import React, { useState } from "react";
-import { db } from "../../firebase";
-import { collection, addDoc, doc, setDoc } from "firebase/firestore";
-import type { Subscription, User } from "../../types/api";
+import React, { useState, useEffect } from "react";
+import GCashPayment from "../../components/GCashPayment";
+import QRPayment from "../../components/QRPayment";
 
 const UpgradePage = () => {
-  const [tier, setTier] = useState<'basic' | 'premium'>('premium');
-  const [interval, setInterval] = useState<'monthly' | 'yearly'>('monthly');
-  const [autoRenew, setAutoRenew] = useState(true);
-  const [fullName, setFullName] = useState(process.env.NEXT_PUBLIC_USER_NAME || "");
-  const [email, setEmail] = useState(process.env.NEXT_PUBLIC_USER_EMAIL || "");
-  const [mobileNumber, setMobileNumber] = useState("");
-  const [paymentMethod, setPaymentMethod] = useState<"gcash" | "bank">("gcash");
-  const [accountNumber, setAccountNumber] = useState("");
-  const [cvc, setCvc] = useState("");
-  const [paymentVerification, setPaymentVerification] = useState("");
-  const [authorizationConfirmed, setAuthorizationConfirmed] = useState(false);
-  const [isProcessing, setIsProcessing] = useState(false);
-  const [paymentStatus, setPaymentStatus] = useState<'idle' | 'processing' | 'completed' | 'failed'>('idle');
+  const [showPayment, setShowPayment] = useState(false);
+  const [paymentMethod, setPaymentMethod] = useState<'gcash' | 'qr' | null>(null);
 
-  const getAmount = () => {
-    if (tier === 'premium') {
-      return interval === 'monthly' ? 299 : 299 * 12;
+  // Check for autoOpen parameter and show payment
+  useEffect(() => {
+    const urlParams = new URLSearchParams(window.location.search);
+    if (urlParams.get('autoOpen') === 'true') {
+      setShowPayment(true);
+      // Clean up URL
+      const newUrl = window.location.pathname;
+      window.history.replaceState({}, document.title, newUrl);
     }
-    return interval === 'monthly' ? 99 : 99 * 12;
+  }, []);
+
+  const handleBack = () => {
+    if (paymentMethod) {
+      setPaymentMethod(null);
+    } else {
+      setShowPayment(false);
+    }
   };
 
-  const handleProceed = async () => {
-    if (!authorizationConfirmed) {
-      alert("Please confirm authorization to proceed with payment.");
-      return;
+  const handleSuccess = (data: unknown) => {
+    // Payment was successful, redirect or update UI
+    console.log('Payment success:', data);
+    alert('Payment successful! Your subscription has been activated.');
+    window.location.href = '/chat';
+  };
+
+  const selectPaymentMethod = (method: 'gcash' | 'qr') => {
+    setPaymentMethod(method);
+  };
+
+  const renderPaymentComponent = () => {
+    if (!paymentMethod) {
+      return (
+        <div className="space-y-4">
+          <h3 className="text-lg font-semibold text-center mb-6">Choose Payment Method</h3>
+
+          <button
+            onClick={() => selectPaymentMethod('qr')}
+            className="w-full p-4 border border-green-200 rounded-lg hover:bg-green-50 transition-colors text-left"
+          >
+            <div className="flex items-center space-x-3">
+              <div className="w-10 h-10 bg-green-100 rounded-lg flex items-center justify-center">
+                <span className="text-green-600 text-xl">📱</span>
+              </div>
+              <div>
+                <div className="font-semibold text-gray-800">QR Code Payment</div>
+                <div className="text-sm text-gray-600">Scan with any banking app</div>
+              </div>
+            </div>
+          </button>
+
+          <button
+            onClick={() => selectPaymentMethod('gcash')}
+            className="w-full p-4 border border-blue-200 rounded-lg hover:bg-blue-50 transition-colors text-left"
+          >
+            <div className="flex items-center space-x-3">
+              <div className="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center">
+                <span className="text-blue-600 text-xl">💳</span>
+              </div>
+              <div>
+                <div className="font-semibold text-gray-800">GCash Direct</div>
+                <div className="text-sm text-gray-600">One-click GCash payment</div>
+              </div>
+            </div>
+          </button>
+        </div>
+      );
     }
 
-    if (!fullName || !email || !mobileNumber || !accountNumber) {
-      alert("Please fill in all required fields.");
-      return;
+    if (paymentMethod === 'qr') {
+      return (
+        <QRPayment
+          onSuccess={handleSuccess}
+          onBack={handleBack}
+          amount={299}
+          userId="current-user-id" // In production, get from auth context
+          planType="premium"
+        />
+      );
     }
 
-    setIsProcessing(true);
-    setPaymentStatus('processing');
-
-    try {
-      // Call payment API
-      const paymentResponse = await fetch('/api/payment', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          amount: getAmount(),
-          paymentMethod,
-          userId: email, // In production, use actual user ID from auth
-          planType: tier,
-          interval,
-          accountNumber,
-          fullName,
-          email,
-          mobileNumber,
-          paymentVerification,
-        }),
-      });
-
-      const paymentData = await paymentResponse.json();
-
-      if (!paymentResponse.ok) {
-        throw new Error(paymentData.error || 'Payment failed');
-      }
-
-      if (paymentData.success) {
-        // Create subscription record in Firestore
-        const subscription: Omit<Subscription, 'id'> = {
-          userId: email, // In production, use actual user ID
-          tier,
-          status: 'active',
-          paymentMethod,
-          accountNumber,
-          fullName,
-          email,
-          mobileNumber,
-          paymentVerification,
-          authorizationConfirmed,
-          startDate: new Date(),
-          endDate: new Date(Date.now() + (interval === 'monthly' ? 30 : 365) * 24 * 60 * 60 * 1000),
-          autoRenew,
-          interval,
-        };
-
-        // Save subscription
-        await addDoc(collection(db, "subscriptions"), subscription);
-
-        // Update user role (in production, this would be done server-side)
-        const userRef = doc(db, "users", email);
-        await setDoc(userRef, {
-          id: email,
-          email,
-          role: 'subscriber',
-          subscriptionStatus: 'active',
-          referralLimit: 50,
-          activeReferrals: 0,
-          fullName,
-          mobileNumber,
-          subscriptionStartDate: new Date(),
-          subscriptionEndDate: new Date(Date.now() + (interval === 'monthly' ? 30 : 365) * 24 * 60 * 60 * 1000),
-          lastLogin: new Date(),
-        } as User, { merge: true });
-
-        setPaymentStatus('completed');
-
-        // Redirect to success page or show success message
-        alert(`🎉 Payment successful! Welcome to DeepVerse ${tier.charAt(0).toUpperCase() + tier.slice(1)}!`);
-
-        // In production, redirect to dashboard or success page
-        setTimeout(() => {
-          window.location.href = '/chat';
-        }, 2000);
-
-      } else {
-        throw new Error('Payment was not successful');
-      }
-
-    } catch (error) {
-      console.error("Payment error:", error);
-      setPaymentStatus('failed');
-      alert(`Payment failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
-    } finally {
-      setIsProcessing(false);
+    if (paymentMethod === 'gcash') {
+      return (
+        <GCashPayment
+          onSuccess={handleSuccess}
+          onBack={handleBack}
+          amount={299}
+          userId="current-user-id" // In production, get from auth context
+          planType="premium"
+        />
+      );
     }
+
+    return null;
   };
 
   return (
-    <div style={{ padding: 20, fontFamily: "Arial, sans-serif" }}>
-      <button
-        onClick={() => window.location.href = '/'}
-        style={{ marginBottom: 20, padding: 8, background: "none", border: "none", cursor: "pointer", fontSize: 20 }}
-      >
-        ← Back
-      </button>
-      <h1>Upgrade to Subscribed</h1>
-      <form onSubmit={(e) => { e.preventDefault(); handleProceed(); }}>
-        <div style={{ marginBottom: 10 }}>
-          <label>Subscription Tier: </label>
-          <select value={tier} onChange={(e) => setTier(e.target.value as 'basic' | 'premium')}>
-            <option value="basic">Basic</option>
-            <option value="premium">Premium</option>
-          </select>
-        </div>
-        <div style={{ marginBottom: 10 }}>
-          <label>Payment Interval: </label>
-          <select value={interval} onChange={(e) => setInterval(e.target.value as 'monthly' | 'yearly')}>
-            <option value="monthly">Monthly</option>
-            <option value="yearly">Yearly</option>
-          </select>
-        </div>
-        <div style={{ marginBottom: 10 }}>
-          <label>Auto Renew: </label>
-          <input type="checkbox" checked={autoRenew} onChange={(e) => setAutoRenew(e.target.checked)} />
-        </div>
-        <div style={{ marginBottom: 10 }}>
-          <label>Full Name: </label>
-          <input
-            type="text"
-            value={fullName}
-            onChange={(e) => setFullName(e.target.value)}
-            required
-            style={{ padding: 8, width: 200 }}
-          />
-        </div>
-        <div style={{ marginBottom: 10 }}>
-          <label>Email: </label>
-          <input
-            type="email"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            required
-            style={{ padding: 8, width: 200 }}
-          />
-        </div>
-        <div style={{ marginBottom: 10 }}>
-          <label>Mobile Number: </label>
-          <input
-            type="tel"
-            value={mobileNumber}
-            onChange={(e) => setMobileNumber(e.target.value)}
-            required
-            style={{ padding: 8, width: 200 }}
-          />
-        </div>
-        <div style={{ marginBottom: 10 }}>
-          <label>Payment Method: </label>
-          <div>
-            <input
-              type="radio"
-              name="payment"
-              value="gcash"
-              checked={paymentMethod === "gcash"}
-              onChange={() => setPaymentMethod("gcash")}
-            /> GCash
+    <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
+      <div className="max-w-md w-full">
+        {showPayment ? (
+          <div className="bg-white rounded-lg shadow-lg">
+            {renderPaymentComponent()}
           </div>
-          <div>
-            <input
-              type="radio"
-              name="payment"
-              value="bank"
-              checked={paymentMethod === "bank"}
-              onChange={() => setPaymentMethod("bank")}
-            /> Bank
-          </div>
-        </div>
-        {paymentMethod === "gcash" && (
-          <div style={{ marginBottom: 10 }}>
-            <label>GCash Number: </label>
-            <input
-              type="text"
-              value={accountNumber}
-              onChange={(e) => setAccountNumber(e.target.value)}
-              required
-              style={{ padding: 8, width: 200 }}
-            />
+        ) : (
+          <div className="bg-white rounded-lg shadow-lg p-8 text-center">
+            <h1 className="text-2xl font-bold text-gray-800 mb-4">Upgrade to Premium</h1>
+            <p className="text-gray-600 mb-6">
+              Get unlimited access to DeepVerse AI with premium features.
+            </p>
+            <button
+              onClick={() => setShowPayment(true)}
+              className="w-full bg-blue-600 hover:bg-blue-700 text-white py-3 px-6 rounded-lg font-semibold transition-colors"
+            >
+              Subscribe Now - ₱299/month
+            </button>
+            <p className="text-sm text-gray-500 mt-4">
+              Secure payment powered by PayMongo
+            </p>
           </div>
         )}
-        {paymentMethod === "bank" && (
-          <>
-            <div style={{ marginBottom: 10 }}>
-              <label>Account Number: </label>
-              <input
-                type="text"
-                value={accountNumber}
-                onChange={(e) => setAccountNumber(e.target.value)}
-                required
-                style={{ padding: 8, width: 200 }}
-              />
-            </div>
-            <div style={{ marginBottom: 10 }}>
-              <label>CVC: </label>
-              <input
-                type="text"
-                value={cvc}
-                onChange={(e) => setCvc(e.target.value)}
-                required
-                style={{ padding: 8, width: 200 }}
-              />
-            </div>
-          </>
-        )}
-        <div style={{ marginBottom: 10 }}>
-          <label>Payment Verification Code: </label>
-          <input
-            type="text"
-            value={paymentVerification}
-            onChange={(e) => setPaymentVerification(e.target.value)}
-            required
-            style={{ padding: 8, width: 200 }}
-          />
-        </div>
-        <div style={{ marginBottom: 10 }}>
-          <label>Confirm Authorization: </label>
-          <input
-            type="checkbox"
-            checked={authorizationConfirmed}
-            onChange={(e) => setAuthorizationConfirmed(e.target.checked)}
-            required
-          />
-        </div>
-        <button type="submit" style={{ padding: 10, background: "#007AFF", color: "white", border: "none", cursor: "pointer" }}>
-          Proceed Payment
-        </button>
-      </form>
+      </div>
     </div>
   );
 };

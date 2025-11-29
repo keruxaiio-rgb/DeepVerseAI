@@ -25,8 +25,8 @@ export type ApiResponse = {
 export type User = {
   id: string;
   email: string;
-  role: 'free' | 'pending_subscriber' | 'subscriber' | 'admin' | 'demo';
-  subscriptionStatus: 'none' | 'pending' | 'active' | 'expired' | 'cancelled';
+  role: 'user' | 'admin' | 'demo';
+  subscriptionStatus: 'trial' | 'active' | 'expired' | 'unsubscribed' | 'pending';
   subscriptionId?: string;
   referralLimit: number; // Maximum active referrals allowed
   activeReferrals: number; // Current active referrals
@@ -34,8 +34,17 @@ export type User = {
   mobileNumber?: string;
   subscriptionStartDate?: Date;
   subscriptionEndDate?: Date;
+  trialEndsAt?: Date;
   lastLogin?: Date;
   referralBonus?: number;
+  withdrawalAccount?: {
+    method: 'gcash' | 'bank';
+    gcashNumber?: string;
+    gcashName?: string;
+    bankName?: string;
+    accountNumber?: string;
+    accountName?: string;
+  };
 };
 
 export type Subscription = {
@@ -54,4 +63,24 @@ export type Subscription = {
   endDate: Date;
   autoRenew: boolean;
   interval: 'monthly' | 'yearly';
+  invoiceNumber: string; // Unique invoice number for each payment
+};
+
+export type Withdrawal = {
+  id: string;
+  userId: string;
+  amount: number;
+  method: 'gcash' | 'bank';
+  accountDetails: {
+    gcashNumber?: string;
+    gcashName?: string;
+    bankName?: string;
+    accountNumber?: string;
+    accountName?: string;
+  };
+  requestedAt: Date;
+  status: 'pending' | 'approved' | 'rejected';
+  processedAt?: Date;
+  processedBy?: string;
+  notes?: string;
 };

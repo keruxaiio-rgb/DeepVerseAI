@@ -3,7 +3,7 @@
 import React, { useState } from "react";
 import { auth, db } from "../../firebase";
 import { signInWithEmailAndPassword, signInWithPopup, signInWithRedirect, getRedirectResult, GoogleAuthProvider, OAuthProvider, GithubAuthProvider } from "firebase/auth";
-import { doc, setDoc } from "firebase/firestore";
+import { doc, setDoc, getDoc } from "firebase/firestore";
 import type { User } from "../../types/api";
 
 const styles: Record<string, React.CSSProperties> = {
@@ -79,8 +79,20 @@ export default function LoginPage() {
     try {
       const userCredential = await signInWithEmailAndPassword(auth, email, password);
       const user = userCredential.user;
-      // Check role from Firestore or set default
-      window.location.href = '/chat';
+
+      // Check if user document exists in Firestore
+      const userDocRef = doc(db, "users", user.uid);
+      const userDocSnap = await getDoc(userDocRef);
+
+      if (!userDocSnap.exists()) {
+        // User document doesn't exist - this shouldn't happen for valid logins
+        alert("Account data not found. Please contact support.");
+        return;
+      }
+
+      // User authenticated successfully - redirect to subscription landing page
+      // The landing page will check subscription status and redirect appropriately
+      window.location.href = '/subscription-landing';
     } catch (error: unknown) {
       console.error("Login error:", error);
       let errorMessage = "Login failed";
@@ -107,21 +119,28 @@ export default function LoginPage() {
     try {
       const result = await signInWithPopup(auth, provider);
       const user = result.user;
-      // Save user to Firestore
-      const userDoc: User = {
-        id: user.uid,
-        email: user.email || "",
-        role: user.email === 'kerux.ai.io@gmail.com' ? 'admin' :
-              user.email === process.env.NEXT_PUBLIC_ADMIN_EMAIL ? 'admin' :
-              user.email === process.env.NEXT_PUBLIC_DEMO_EMAIL ? 'demo' : 'free',
-        subscriptionStatus: user.email === 'kerux.ai.io@gmail.com' ? 'active' : 'none',
-        referralLimit: user.email === 'kerux.ai.io@gmail.com' ? 999999 : 50, // Unlimited for creator
-        activeReferrals: 0,
-        fullName: user.displayName || "",
-        lastLogin: new Date(),
-      };
-      await setDoc(doc(db, "users", user.uid), userDoc);
-      window.location.href = '/chat';
+
+      // Check if user document already exists
+      const userDocRef = doc(db, "users", user.uid);
+      const userDocSnap = await getDoc(userDocRef);
+
+      if (!userDocSnap.exists()) {
+        // Create new user document with trial
+        const userDoc: User = {
+          id: user.uid,
+          email: user.email || "",
+          role: 'user', // New OAuth users start as regular users
+          subscriptionStatus: 'trial',
+          referralLimit: 50,
+          activeReferrals: 0,
+          fullName: user.displayName || "",
+          trialEndsAt: new Date(Date.now() + 3 * 24 * 60 * 60 * 1000), // 3 days trial
+          lastLogin: new Date(),
+        };
+        await setDoc(userDocRef, userDoc);
+      }
+
+      window.location.href = '/subscription-landing';
     } catch (error) {
       console.error("Google login error:", error);
       alert("Google login failed");
@@ -132,21 +151,28 @@ export default function LoginPage() {
     try {
       const result = await signInWithPopup(auth, new OAuthProvider('apple.com'));
       const user = result.user;
-      // Save user to Firestore
-      const userDoc: User = {
-        id: user.uid,
-        email: user.email || "",
-        role: user.email === 'kerux.ai.io@gmail.com' ? 'admin' :
-              user.email === process.env.NEXT_PUBLIC_ADMIN_EMAIL ? 'admin' :
-              user.email === process.env.NEXT_PUBLIC_DEMO_EMAIL ? 'demo' : 'free',
-        subscriptionStatus: user.email === 'kerux.ai.io@gmail.com' ? 'active' : 'none',
-        referralLimit: user.email === 'kerux.ai.io@gmail.com' ? 999999 : 50, // Unlimited for creator
-        activeReferrals: 0,
-        fullName: user.displayName || "",
-        lastLogin: new Date(),
-      };
-      await setDoc(doc(db, "users", user.uid), userDoc);
-      window.location.href = '/chat';
+
+      // Check if user document already exists
+      const userDocRef = doc(db, "users", user.uid);
+      const userDocSnap = await getDoc(userDocRef);
+
+      if (!userDocSnap.exists()) {
+        // Create new user document with trial
+        const userDoc: User = {
+          id: user.uid,
+          email: user.email || "",
+          role: 'user', // New OAuth users start as regular users
+          subscriptionStatus: 'trial',
+          referralLimit: 50,
+          activeReferrals: 0,
+          fullName: user.displayName || "",
+          trialEndsAt: new Date(Date.now() + 3 * 24 * 60 * 60 * 1000), // 3 days trial
+          lastLogin: new Date(),
+        };
+        await setDoc(userDocRef, userDoc);
+      }
+
+      window.location.href = '/subscription-landing';
     } catch (error: unknown) {
       console.error("Apple login error:", error);
       let errorMessage = "Apple login failed";
@@ -162,21 +188,28 @@ export default function LoginPage() {
     try {
       const result = await signInWithPopup(auth, provider);
       const user = result.user;
-      // Save user to Firestore
-      const userDoc: User = {
-        id: user.uid,
-        email: user.email || "",
-        role: user.email === 'kerux.ai.io@gmail.com' ? 'admin' :
-              user.email === process.env.NEXT_PUBLIC_ADMIN_EMAIL ? 'admin' :
-              user.email === process.env.NEXT_PUBLIC_DEMO_EMAIL ? 'demo' : 'free',
-        subscriptionStatus: user.email === 'kerux.ai.io@gmail.com' ? 'active' : 'none',
-        referralLimit: user.email === 'kerux.ai.io@gmail.com' ? 999999 : 50, // Unlimited for creator
-        activeReferrals: 0,
-        fullName: user.displayName || "",
-        lastLogin: new Date(),
-      };
-      await setDoc(doc(db, "users", user.uid), userDoc);
-      window.location.href = '/chat';
+
+      // Check if user document already exists
+      const userDocRef = doc(db, "users", user.uid);
+      const userDocSnap = await getDoc(userDocRef);
+
+      if (!userDocSnap.exists()) {
+        // Create new user document with trial
+        const userDoc: User = {
+          id: user.uid,
+          email: user.email || "",
+          role: 'user', // New OAuth users start as regular users
+          subscriptionStatus: 'trial',
+          referralLimit: 50,
+          activeReferrals: 0,
+          fullName: user.displayName || "",
+          trialEndsAt: new Date(Date.now() + 3 * 24 * 60 * 60 * 1000), // 3 days trial
+          lastLogin: new Date(),
+        };
+        await setDoc(userDocRef, userDoc);
+      }
+
+      window.location.href = '/subscription-landing';
     } catch (error) {
       console.error("GitHub login error:", error);
       alert("GitHub login failed");
@@ -213,6 +246,9 @@ export default function LoginPage() {
         <button style={{ ...styles.button, ...styles.githubBtn }} onClick={handleGitHubLogin}>
           Login with GitHub
         </button>
+
+
+
         <p>
           Do not have an account? <span style={styles.link} onClick={() => window.location.href = '/signup'}>Sign Up</span>
         </p>

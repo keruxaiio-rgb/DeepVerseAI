@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import axios from "axios";
 
 // Payment processing endpoint
 export async function POST(req: NextRequest) {
@@ -31,36 +32,121 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // TODO: Implement actual payment processing
-    // For now, simulate payment processing
+    // Implement PayMongo payment processing
+    const paymongoSecretKey = process.env.PAYMONGO_SECRET_KEY;
+    if (!paymongoSecretKey) {
+      return NextResponse.json(
+        { error: "PayMongo configuration missing" },
+        { status: 500 }
+      );
+    }
 
-    // Generate payment reference
-    const paymentRef = `DV-${Date.now()}-${Math.random().toString(36).substring(2, 8).toUpperCase()}`;
+    // Convert amount to centavos (PayMongo uses smallest currency unit)
+    const amountInCentavos = amount * 100;
 
-    // Simulate payment processing delay
-    await new Promise(resolve => setTimeout(resolve, 2000));
+    try {
+      if (paymentMethod === 'gcash') {
+        // Create GCash source directly (this is the correct flow for GCash)
+        const sourceResponse = await axios.post(
+          'https://api.paymongo.com/v1/sources',
+          {
+            data: {
+              attributes: {
+                amount: amountInCentavos,
+                currency: 'PHP',
+                type: 'gcash',
+                redirect: {
+                  success: `${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'}/upgrade?success=true&source_id={id}`,
+                  failed: `${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'}/upgrade?success=false&source_id={id}`
+                },
+                metadata: {
+                  userId,
+                  planType,
+                  paymentMethod
+                }
+              }
+            }
+          },
+          {
+            headers: {
+              'Authorization': `Basic ${Buffer.from(paymongoSecretKey + ':').toString('base64')}`,
+              'Content-Type': 'application/json'
+            }
+          }
+        );
 
-    // Mock successful payment response
-    const paymentResponse = {
-      success: true,
-      paymentId: paymentRef,
-      amount: amount,
-      currency: 'PHP',
-      paymentMethod: paymentMethod,
-      status: 'completed',
-      userId: userId,
-      planType: planType,
-      timestamp: new Date().toISOString(),
-      // In real implementation, this would come from payment provider
-      transactionId: `txn_${Date.now()}`,
-      paymentUrl: paymentMethod === 'gcash' ? `gcash://payment?amount=${amount}&ref=${paymentRef}` : null
-    };
+        const source = sourceResponse.data.data;
 
-    // TODO: Save payment record to database
-    // TODO: Update user subscription status
-    // TODO: Send confirmation email
+        const paymentResponse = {
+          success: true,
+          paymentId: source.id,
+          amount: amount,
+          currency: 'PHP',
+          paymentMethod: paymentMethod,
+          status: source.attributes.status,
+          userId: userId,
+          planType: planType,
+          timestamp: new Date().toISOString(),
+          transactionId: source.id,
+          paymentUrl: source.attributes.redirect.checkout_url,
+          sourceId: source.id
+        };
 
-    return NextResponse.json(paymentResponse);
+        return NextResponse.json(paymentResponse);
+
+      } else if (paymentMethod === 'bank') {
+        // For bank transfer, create a payment intent without source
+        const paymentIntentResponse = await axios.post(
+          'https://api.paymongo.com/v1/payment_intents',
+          {
+            data: {
+              attributes: {
+                amount: amountInCentavos,
+                currency: 'PHP',
+                payment_method_allowed: ['paymaya'],
+                description: `DeepVerse AI ${planType} subscription`,
+                metadata: {
+                  userId,
+                  planType,
+                  paymentMethod
+                }
+              }
+            }
+          },
+          {
+            headers: {
+              'Authorization': `Basic ${Buffer.from(paymongoSecretKey + ':').toString('base64')}`,
+              'Content-Type': 'application/json'
+            }
+          }
+        );
+
+        const paymentIntent = paymentIntentResponse.data.data;
+
+        const paymentResponse = {
+          success: true,
+          paymentId: paymentIntent.id,
+          amount: amount,
+          currency: 'PHP',
+          paymentMethod: paymentMethod,
+          status: paymentIntent.attributes.status,
+          userId: userId,
+          planType: planType,
+          timestamp: new Date().toISOString(),
+          transactionId: paymentIntent.id,
+          paymentUrl: null // Bank transfer doesn't have immediate checkout URL
+        };
+
+        return NextResponse.json(paymentResponse);
+      }
+
+    } catch (paymongoError) {
+      console.error('PayMongo API error:', (paymongoError as any).response?.data || (paymongoError as any).message);
+      return NextResponse.json(
+        { error: "Payment gateway error", details: (paymongoError as any).response?.data },
+        { status: 500 }
+      );
+    }
 
   } catch (error) {
     console.error('Payment processing error:', error);
@@ -84,17 +170,37 @@ export async function GET(req: NextRequest) {
       );
     }
 
-    // TODO: Check payment status from database
-    // For now, return mock status
-    const mockStatus = {
-      paymentId: paymentId,
-      status: 'completed',
-      amount: 299,
-      currency: 'PHP',
-      completedAt: new Date().toISOString()
+    const paymongoSecretKey = process.env.PAYMONGO_SECRET_KEY;
+    if (!paymongoSecretKey) {
+      return NextResponse.json(
+        { error: "PayMongo configuration missing" },
+        { status: 500 }
+      );
+    }
+
+    // Get payment intent status from PayMongo
+    const paymentIntentResponse = await axios.get(
+      `https://api.paymongo.com/v1/payment_intents/${paymentId}`,
+      {
+        headers: {
+          'Authorization': `Basic ${Buffer.from(paymongoSecretKey + ':').toString('base64')}`,
+          'Content-Type': 'application/json'
+        }
+      }
+    );
+
+    const paymentIntent = paymentIntentResponse.data.data;
+
+    const statusResponse = {
+      paymentId: paymentIntent.id,
+      status: paymentIntent.attributes.status,
+      amount: paymentIntent.attributes.amount / 100, // Convert back from centavos
+      currency: paymentIntent.attributes.currency,
+      completedAt: paymentIntent.attributes.created_at,
+      metadata: paymentIntent.attributes.metadata
     };
 
-    return NextResponse.json(mockStatus);
+    return NextResponse.json(statusResponse);
 
   } catch (error) {
     console.error('Payment status check error:', error);

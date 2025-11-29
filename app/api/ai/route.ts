@@ -180,8 +180,42 @@ FORMATTING STANDARDS:
     });
 
     if (!openaiRes.ok) {
-      console.error("OpenAI API error:", openaiRes.status, await openaiRes.text());
-      return NextResponse.json({ text: "OpenAI API error" }, { status: 500 });
+      const errorText = await openaiRes.text();
+      console.error("OpenAI API error:", openaiRes.status, errorText);
+
+      let errorMessage = "AI service temporarily unavailable. Please try again later.";
+
+      try {
+        const errorData = JSON.parse(errorText);
+        const errorType = errorData.error?.type;
+        const errorCode = errorData.error?.code;
+
+        switch (errorCode) {
+          case 'insufficient_quota':
+            errorMessage = "Your OpenAI account has exceeded its usage quota. Please check your OpenAI billing settings or upgrade your plan.";
+            break;
+          case 'invalid_api_key':
+            errorMessage = "Invalid API key. Please check your OpenAI API key configuration.";
+            break;
+          case 'rate_limit_exceeded':
+            errorMessage = "Rate limit exceeded. Please wait a moment before trying again.";
+            break;
+          case 'model_not_found':
+            errorMessage = "The requested AI model is not available. Please contact support.";
+            break;
+          default:
+            if (errorType === 'billing_hard_limit_reached') {
+              errorMessage = "Your OpenAI account has reached its billing limit. Please update your payment method.";
+            } else if (errorType === 'billing_soft_limit_reached') {
+              errorMessage = "Your OpenAI account is approaching its billing limit. Please monitor your usage.";
+            }
+        }
+      } catch (parseError) {
+        // If we can't parse the error JSON, use the generic message
+        console.error("Failed to parse OpenAI error response:", parseError);
+      }
+
+      return NextResponse.json({ text: errorMessage }, { status: 500 });
     }
 
     const openaiJson = await openaiRes.json();

@@ -180,9 +180,8 @@ const AdminPage = () => {
                         onChange={(e) => updateUserRole(user.id, e.target.value as User['role'])}
                         style={{ padding: 5 }}
                       >
-                        <option value="free">Free</option>
+                        <option value="user">User</option>
                         <option value="demo">Demo</option>
-                        <option value="subscriber">Subscriber</option>
                         <option value="admin">Admin</option>
                       </select>
                     </td>
@@ -251,9 +250,9 @@ const AdminPage = () => {
               </p>
             </div>
             <div style={{ padding: 20, border: "1px solid #ccc", borderRadius: 5 }}>
-              <h3>Free Users</h3>
+              <h3>Trial Users</h3>
               <p style={{ fontSize: 24, fontWeight: "bold", color: "#6C757D" }}>
-                {users.filter(u => u.role === 'free').length}
+                {users.filter(u => u.subscriptionStatus === 'trial').length}
               </p>
             </div>
             <div style={{ padding: 20, border: "1px solid #ccc", borderRadius: 5 }}>

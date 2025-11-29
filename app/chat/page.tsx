@@ -3,10 +3,9 @@
 import React, { useEffect, useRef, useState } from "react";
 import type { ApiPayload, ApiResponse, Message } from "@/types/api";
 import { SubscriptionService, AccessControl } from "@/lib/subscriptionService";
-import { auth, db } from "../../firebase";
-import { onAuthStateChanged, signOut } from "firebase/auth";
-import { doc, getDoc } from "firebase/firestore";
-import type { User } from "../../types/api";
+import { useAuth } from "../../lib/authContext";
+import { signOut } from "firebase/auth";
+import { auth } from "../../firebase";
 
 const uid = (prefix = "") => prefix + Math.random().toString(36).slice(2, 9);
 
@@ -269,7 +268,12 @@ export default function ChatPage() {
   const [currentConversationId, setCurrentConversationId] = useState<string | null>(null);
   const [showUpgradePanel, setShowUpgradePanel] = useState(false);
   const [showProfilePanel, setShowProfilePanel] = useState(false);
-  const [currentUser, setCurrentUser] = useState<{email?: string | null} | null>(null);
+  const [showWithdrawalModal, setShowWithdrawalModal] = useState(false);
+  const [withdrawalMethod, setWithdrawalMethod] = useState<'gcash' | 'bank'>('gcash');
+  const [withdrawalAmount, setWithdrawalAmount] = useState('');
+  const [withdrawalAccount, setWithdrawalAccount] = useState('');
+  const [withdrawalName, setWithdrawalName] = useState('');
+  const [isSubmittingWithdrawal, setIsSubmittingWithdrawal] = useState(false);
   const convRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
@@ -287,46 +291,34 @@ export default function ChatPage() {
     if (convRef.current) convRef.current.scrollTop = convRef.current.scrollHeight + 200;
   }, [messages, promptQueue]);
 
-  // Check authentication and subscription access on component mount
+  // Use AuthContext for authentication
+  const { currentUser, userData, userRole, subscriptionStatus, loading: authLoading, isAuthenticated, canAccessPremium, trialDaysLeft } = useAuth();
+
+  // Check authentication and subscription access
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, async (user) => {
-      if (!user) {
-        window.location.href = '/login';
-        return;
-      }
+    if (authLoading) return;
 
-      setCurrentUser(user);
+    if (!isAuthenticated) {
+      window.location.href = '/login';
+      return;
+    }
 
-      // Get user data from Firestore
-      const userDocRef = doc(db, "users", user.uid);
-      const userDocSnap = await getDoc(userDocRef);
-      if (!userDocSnap.exists()) {
-        window.location.href = '/login';
-        return;
-      }
+    // Check if user can access premium features
+    if (!canAccessPremium) {
+      window.location.href = '/upgrade';
+      return;
+    }
 
-      const userData = userDocSnap.data() as User;
+    if (subscriptionStatus === 'pending') {
+      alert('Your payment is being processed. You will have full access once payment is confirmed.');
+    }
 
-      // Check subscription access
-      const accessLevel = await SubscriptionService.getAccessLevel(user.email || '');
-      if (accessLevel === 'free') {
-        window.location.href = '/upgrade';
-        return;
-      }
-
-      if (accessLevel === 'pending') {
-        alert('Your payment is being processed. You will have full access once payment is confirmed.');
-      }
-
-      // Check for expiration notifications
-      const expirationCheck = await SubscriptionService.checkExpirationAndNotify(user.email || '');
-      if (expirationCheck.shouldNotify) {
-        alert(`Your subscription expires in ${expirationCheck.daysUntilExpiry} days. Please renew to avoid service interruption.`);
-      }
-    });
-
-    return () => unsubscribe();
-  }, []);
+    if (subscriptionStatus === 'expired') {
+      alert('Your trial has expired. Please upgrade to continue using premium features.');
+      window.location.href = '/upgrade';
+      return;
+    }
+  }, [authLoading, isAuthenticated, canAccessPremium, subscriptionStatus]);
 
   const initialAskPrompt = "What theological or Bible question would you like answered?";
   const initialSermonPrompt = "What passage would you like to study? (e.g., John 3:16)";
@@ -488,15 +480,76 @@ export default function ChatPage() {
 
   const handleChatItemClick = (m: Message) => setUserText(m.text);
 
-  const subscribed = process.env.NEXT_PUBLIC_SUBSCRIBED === "true";
-  const userRole = process.env.NEXT_PUBLIC_USER_EMAIL === process.env.NEXT_PUBLIC_ADMIN_EMAIL ? 'admin' : process.env.NEXT_PUBLIC_USER_EMAIL === process.env.NEXT_PUBLIC_DEMO_EMAIL ? 'demo' : subscribed ? 'subscriber' : 'free';
-
-  const referralKey = generateReferralKey(process.env.NEXT_PUBLIC_USER_EMAIL || "user@example.com");
+  const subscribed = subscriptionStatus === 'active' || subscriptionStatus === 'trial';
+  const referralKey = generateReferralKey(currentUser?.email || "user@example.com");
   const referralUrl = typeof window !== 'undefined' ? `${window.location.origin}/signup?ref=${referralKey}` : '';
 
   const copyReferralLink = () => {
     navigator.clipboard.writeText(referralUrl);
     alert('Referral link copied to clipboard!');
+  };
+
+  const handleWithdrawalSubmit = async () => {
+    if (!currentUser) return;
+
+    const amount = parseFloat(withdrawalAmount);
+    const availableBalance = userData?.referralBonus || 0;
+
+    if (amount < 50) {
+      alert('Minimum withdrawal amount is ₱50');
+      return;
+    }
+
+    if (amount > availableBalance) {
+      alert('Insufficient balance for withdrawal');
+      return;
+    }
+
+    if (!withdrawalAccount.trim() || !withdrawalName.trim()) {
+      alert('Please fill in all required fields');
+      return;
+    }
+
+    setIsSubmittingWithdrawal(true);
+
+    try {
+      const response = await fetch('/api/withdrawals', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          userId: currentUser?.uid,
+          amount,
+          method: withdrawalMethod,
+          accountDetails: withdrawalMethod === 'gcash' ? {
+            gcashNumber: withdrawalAccount,
+            gcashName: withdrawalName,
+          } : {
+            accountNumber: withdrawalAccount,
+            accountName: withdrawalName,
+            bankName: 'BDO', // Default bank, can be made configurable later
+          },
+        }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || 'Withdrawal request failed');
+      }
+
+      alert('Withdrawal request submitted successfully! You will receive your funds within 3-5 business days.');
+      setShowWithdrawalModal(false);
+      setWithdrawalAmount('');
+      setWithdrawalAccount('');
+      setWithdrawalName('');
+    } catch (error) {
+      console.error('Withdrawal error:', error);
+      alert('Failed to submit withdrawal request. Please try again.');
+    } finally {
+      setIsSubmittingWithdrawal(false);
+    }
   };
 
   return (
@@ -562,9 +615,7 @@ export default function ChatPage() {
             </div>
             <div>
               <div style={{ fontWeight: 700, color: "#222" }}>
-                {process.env.NEXT_PUBLIC_USER_EMAIL === 'kerux.ai.io@gmail.com'
-                  ? 'Admin'
-                  : (process.env.NEXT_PUBLIC_USER_NAME || "Guest User")}
+                {userData?.fullName || currentUser?.displayName || currentUser?.email?.split('@')[0] || "User"}
               </div>
             </div>
           </div>
@@ -676,7 +727,7 @@ export default function ChatPage() {
               </div>
             </div>
 
-            <button style={styles.upgradeButton} onClick={() => alert('Payment integration coming soon!')}>
+            <button style={styles.upgradeButton} onClick={() => window.location.href = '/upgrade'}>
               Subscribe Now - ₱299/month
             </button>
           </div>
@@ -698,14 +749,12 @@ export default function ChatPage() {
               <div style={styles.profileItem}>
                 <span style={styles.profileLabel}>Full Name:</span>
                 <span style={styles.profileValue}>
-                  {process.env.NEXT_PUBLIC_USER_EMAIL === 'kerux.ai.io@gmail.com'
-                    ? 'Admin'
-                    : (process.env.NEXT_PUBLIC_USER_NAME || "Guest User")}
+                  {userData?.fullName || currentUser?.displayName || "User"}
                 </span>
               </div>
               <div style={styles.profileItem}>
                 <span style={styles.profileLabel}>Email:</span>
-                <span style={styles.profileValue}>{process.env.NEXT_PUBLIC_USER_EMAIL || "user@example.com"}</span>
+                <span style={styles.profileValue}>{currentUser?.email || "user@example.com"}</span>
               </div>
               <div style={styles.profileItem}>
                 <span style={styles.profileLabel}>Role:</span>
@@ -713,12 +762,19 @@ export default function ChatPage() {
               </div>
               <div style={styles.profileItem}>
                 <span style={styles.profileLabel}>Subscription Status:</span>
-                <span style={styles.profileValue}>{subscribed ? "Active" : "Free"}</span>
+                <span style={styles.profileValue}>
+                  {subscriptionStatus === 'trial' ? `Trial (${trialDaysLeft} days left)` :
+                   subscriptionStatus === 'active' ? 'Active' :
+                   subscriptionStatus === 'expired' ? 'Expired' :
+                   subscriptionStatus === 'pending' ? 'Pending' : 'Free'}
+                </span>
               </div>
-              {subscribed && (
+              {(subscriptionStatus === 'active' || subscriptionStatus === 'trial') && userData?.subscriptionEndDate && (
                 <div style={styles.profileItem}>
                   <span style={styles.profileLabel}>Renewal Date:</span>
-                  <span style={styles.profileValue}>Dec 28, 2025</span>
+                  <span style={styles.profileValue}>
+                    {new Date(userData.subscriptionEndDate).toLocaleDateString()}
+                  </span>
                 </div>
               )}
             </div>
@@ -754,11 +810,31 @@ export default function ChatPage() {
                 <span style={styles.profileValue}>0</span>
               </div>
               <div style={styles.profileItem}>
-                <span style={styles.profileLabel}>Total Bonus Earned:</span>
-                <span style={styles.profileValue}>₱0.00</span>
+                <span style={styles.profileLabel}>Available for Withdrawal:</span>
+                <span style={styles.profileValue}>₱{(userData?.referralBonus || 0).toFixed(2)}</span>
               </div>
 
-              <div style={{ marginTop: 16, padding: 12, background: "#E8F5E8", borderRadius: 8, border: "1px solid #4CAF50" }}>
+              <div style={{ marginTop: 16 }}>
+                <button
+                  onClick={() => setShowWithdrawalModal(true)}
+                  disabled={(userData?.referralBonus || 0) < 50}
+                  style={{
+                    width: "100%",
+                    padding: "12px",
+                    background: (userData?.referralBonus || 0) >= 50 ? "#28a745" : "#6c757d",
+                    color: "white",
+                    border: "none",
+                    borderRadius: 8,
+                    fontWeight: 600,
+                    cursor: (userData?.referralBonus || 0) >= 50 ? "pointer" : "not-allowed",
+                    marginBottom: 12,
+                  }}
+                >
+                  Withdraw Rewards {(userData?.referralBonus || 0) < 50 && "(Min ₱50)"}
+                </button>
+              </div>
+
+              <div style={{ padding: 12, background: "#E8F5E8", borderRadius: 8, border: "1px solid #4CAF50" }}>
                 <strong>How Referral Program Works:</strong><br />
                 Share your referral link with others. When someone clicks your link and signs up for a subscription, you earn 10% monthly bonus of ₱299 (₱29.90/month per referral). There are no limits on active referral bonuses per subscriber.
               </div>
@@ -772,6 +848,182 @@ export default function ChatPage() {
             }}>
               Log Out
             </button>
+          </div>
+        </>
+      )}
+
+      {/* Withdrawal Modal */}
+      {showWithdrawalModal && (
+        <>
+          <div style={styles.overlay} onClick={() => setShowWithdrawalModal(false)} />
+          <div style={{ ...styles.slidePanel, ...(showWithdrawalModal ? styles.slidePanelActive : {}) }}>
+            <div style={styles.panelHeader}>
+              <h2 style={styles.panelTitle}>Withdraw Referral Bonus</h2>
+              <button style={styles.closeButton} onClick={() => setShowWithdrawalModal(false)}>×</button>
+            </div>
+
+            <div style={styles.panelSection}>
+              <div style={styles.profileItem}>
+                <span style={styles.profileLabel}>Available Balance:</span>
+                <span style={styles.profileValue}>₱{(userData?.referralBonus || 0).toFixed(2)}</span>
+              </div>
+              <div style={styles.profileItem}>
+                <span style={styles.profileLabel}>Minimum Withdrawal:</span>
+                <span style={styles.profileValue}>₱50.00</span>
+              </div>
+            </div>
+
+            <div style={styles.panelSection}>
+              <h3 style={styles.sectionTitle}>Withdrawal Method</h3>
+              <div style={{ display: "flex", gap: 16, marginBottom: 16 }}>
+                <label style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer" }}>
+                  <input
+                    type="radio"
+                    name="withdrawalMethod"
+                    value="gcash"
+                    checked={withdrawalMethod === 'gcash'}
+                    onChange={() => setWithdrawalMethod('gcash')}
+                  />
+                  GCash
+                </label>
+                <label style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer" }}>
+                  <input
+                    type="radio"
+                    name="withdrawalMethod"
+                    value="bank"
+                    checked={withdrawalMethod === 'bank'}
+                    onChange={() => setWithdrawalMethod('bank')}
+                  />
+                  Bank Transfer
+                </label>
+              </div>
+
+              <div style={{ marginBottom: 16 }}>
+                <label style={{ display: "block", marginBottom: 8, fontWeight: 500 }}>
+                  Withdrawal Amount (₱):
+                </label>
+                <input
+                  type="number"
+                  min="50"
+                  max={userData?.referralBonus || 0}
+                  step="0.01"
+                  value={withdrawalAmount}
+                  onChange={(e) => setWithdrawalAmount(e.target.value)}
+                  placeholder="Enter amount"
+                  style={{
+                    width: "100%",
+                    padding: "12px",
+                    border: "1px solid #ddd",
+                    borderRadius: 8,
+                    fontSize: 16,
+                  }}
+                />
+              </div>
+
+              {withdrawalMethod === 'gcash' ? (
+                <>
+                  <div style={{ marginBottom: 16 }}>
+                    <label style={{ display: "block", marginBottom: 8, fontWeight: 500 }}>
+                      GCash Number:
+                    </label>
+                    <input
+                      type="text"
+                      value={withdrawalAccount}
+                      onChange={(e) => setWithdrawalAccount(e.target.value.replace(/\D/g, '').slice(0, 11))}
+                      placeholder="09XXXXXXXXX"
+                      maxLength={11}
+                      style={{
+                        width: "100%",
+                        padding: "12px",
+                        border: "1px solid #ddd",
+                        borderRadius: 8,
+                        fontSize: 16,
+                      }}
+                    />
+                  </div>
+                  <div style={{ marginBottom: 16 }}>
+                    <label style={{ display: "block", marginBottom: 8, fontWeight: 500 }}>
+                      GCash Account Name:
+                    </label>
+                    <input
+                      type="text"
+                      value={withdrawalName}
+                      onChange={(e) => setWithdrawalName(e.target.value)}
+                      placeholder="Full name on GCash account"
+                      style={{
+                        width: "100%",
+                        padding: "12px",
+                        border: "1px solid #ddd",
+                        borderRadius: 8,
+                        fontSize: 16,
+                      }}
+                    />
+                  </div>
+                </>
+              ) : (
+                <>
+                  <div style={{ marginBottom: 16 }}>
+                    <label style={{ display: "block", marginBottom: 8, fontWeight: 500 }}>
+                      Bank Account Number:
+                    </label>
+                    <input
+                      type="text"
+                      value={withdrawalAccount}
+                      onChange={(e) => setWithdrawalAccount(e.target.value)}
+                      placeholder="Account number"
+                      style={{
+                        width: "100%",
+                        padding: "12px",
+                        border: "1px solid #ddd",
+                        borderRadius: 8,
+                        fontSize: 16,
+                      }}
+                    />
+                  </div>
+                  <div style={{ marginBottom: 16 }}>
+                    <label style={{ display: "block", marginBottom: 8, fontWeight: 500 }}>
+                      Account Name:
+                    </label>
+                    <input
+                      type="text"
+                      value={withdrawalName}
+                      onChange={(e) => setWithdrawalName(e.target.value)}
+                      placeholder="Full name on bank account"
+                      style={{
+                        width: "100%",
+                        padding: "12px",
+                        border: "1px solid #ddd",
+                        borderRadius: 8,
+                        fontSize: 16,
+                      }}
+                    />
+                  </div>
+                </>
+              )}
+
+              <div style={{ padding: 12, background: "#FFF3CD", borderRadius: 8, border: "1px solid #FFEAA7", marginBottom: 16 }}>
+                <strong>Processing Time:</strong> 3-5 business days<br />
+                <strong>Fees:</strong> ₱10 processing fee will be deducted from your withdrawal
+              </div>
+
+              <button
+                onClick={handleWithdrawalSubmit}
+                disabled={isSubmittingWithdrawal || parseFloat(withdrawalAmount) < 50 || !withdrawalAccount.trim() || !withdrawalName.trim()}
+                style={{
+                  width: "100%",
+                  padding: "14px",
+                  background: isSubmittingWithdrawal ? "#6c757d" : "#28a745",
+                  color: "white",
+                  border: "none",
+                  borderRadius: 8,
+                  fontWeight: 600,
+                  cursor: isSubmittingWithdrawal ? "not-allowed" : "pointer",
+                  fontSize: 16,
+                }}
+              >
+                {isSubmittingWithdrawal ? "Submitting..." : "Submit Withdrawal Request"}
+              </button>
+            </div>
           </div>
         </>
       )}

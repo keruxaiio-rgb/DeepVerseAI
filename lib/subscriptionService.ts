@@ -154,8 +154,9 @@ export class SubscriptionService {
       if (!user) return 'free';
 
       if (user.role === 'admin') return 'admin';
-      if (user.role === 'pending_subscriber') return 'pending';
+      if (user.subscriptionStatus === 'pending') return 'pending';
       if (user.subscriptionStatus === 'active') return 'premium';
+      if (user.subscriptionStatus === 'trial') return 'premium'; // Trial users get premium access
 
       return 'free';
     } catch (error) {
@@ -202,7 +203,7 @@ export const AccessControl = {
     }
 
     const user = await SubscriptionService.getUserSubscription(userId);
-    if (user?.role === 'pending_subscriber') {
+    if (user?.subscriptionStatus === 'pending') {
       return {
         allowed: false,
         message: 'Your payment is being processed. You will have access once payment is confirmed.'

@@ -3,7 +3,7 @@
 import React, { useState, useEffect } from "react";
 import { auth, db } from "../../firebase";
 import { createUserWithEmailAndPassword, signInWithPopup, GoogleAuthProvider, OAuthProvider, GithubAuthProvider } from "firebase/auth";
-import { doc, setDoc } from "firebase/firestore";
+import { doc, setDoc, getDoc } from "firebase/firestore";
 import type { User } from "../../types/api";
 
 const styles: Record<string, React.CSSProperties> = {
@@ -83,21 +83,21 @@ export default function SignupPage() {
     try {
       const userCredential = await createUserWithEmailAndPassword(auth, email, password);
       const user = userCredential.user;
-      // Save user to Firestore
+
+      // Create new user document with trial - admin privileges are granted via environment variables only
       const userDoc: User = {
         id: user.uid,
         email,
-        role: email === 'kerux.ai.io@gmail.com' ? 'admin' :
-              email === process.env.NEXT_PUBLIC_ADMIN_EMAIL ? 'admin' :
-              email === process.env.NEXT_PUBLIC_DEMO_EMAIL ? 'demo' : 'free',
-        subscriptionStatus: email === 'kerux.ai.io@gmail.com' ? 'active' : 'none',
-        referralLimit: email === 'kerux.ai.io@gmail.com' ? 999999 : 50, // Unlimited for creator
+        role: 'user', // All new email/password users start as regular users
+        subscriptionStatus: 'trial',
+        referralLimit: 50,
         activeReferrals: 0,
         fullName,
+        trialEndsAt: new Date(Date.now() + 3 * 24 * 60 * 60 * 1000), // 3 days trial
         lastLogin: new Date(),
       };
       await setDoc(doc(db, "users", user.uid), userDoc);
-      window.location.href = '/chat';
+      window.location.href = '/subscription-landing';
     } catch (error: unknown) {
       console.error("Signup error:", error);
       let errorMessage = "Signup failed";
@@ -122,21 +122,28 @@ export default function SignupPage() {
     try {
       const result = await signInWithPopup(auth, provider);
       const user = result.user;
-      // Save user to Firestore
-      const userDoc: User = {
-        id: user.uid,
-        email: user.email || "",
-        role: user.email === 'kerux.ai.io@gmail.com' ? 'admin' :
-              user.email === process.env.NEXT_PUBLIC_ADMIN_EMAIL ? 'admin' :
-              user.email === process.env.NEXT_PUBLIC_DEMO_EMAIL ? 'demo' : 'free',
-        subscriptionStatus: user.email === 'kerux.ai.io@gmail.com' ? 'active' : 'none',
-        referralLimit: user.email === 'kerux.ai.io@gmail.com' ? 999999 : 50, // Unlimited for creator
-        activeReferrals: 0,
-        fullName: user.displayName || "",
-        lastLogin: new Date(),
-      };
-      await setDoc(doc(db, "users", user.uid), userDoc);
-      window.location.href = '/chat';
+
+      // Check if user document already exists (user might be signing up again)
+      const userDocRef = doc(db, "users", user.uid);
+      const userDocSnap = await getDoc(userDocRef);
+
+      if (!userDocSnap.exists()) {
+        // Create new user document with trial
+        const userDoc: User = {
+          id: user.uid,
+          email: user.email || "",
+          role: 'user', // New OAuth users start as regular users
+          subscriptionStatus: 'trial',
+          referralLimit: 50,
+          activeReferrals: 0,
+          fullName: user.displayName || "",
+          trialEndsAt: new Date(Date.now() + 3 * 24 * 60 * 60 * 1000), // 3 days trial
+          lastLogin: new Date(),
+        };
+        await setDoc(userDocRef, userDoc);
+      }
+
+      window.location.href = '/subscription-landing';
     } catch (error) {
       console.error("Google signup error:", error);
       alert("Google signup failed");
@@ -148,21 +155,28 @@ export default function SignupPage() {
     try {
       const result = await signInWithPopup(auth, provider);
       const user = result.user;
-      // Save user to Firestore
-      const userDoc: User = {
-        id: user.uid,
-        email: user.email || "",
-        role: user.email === 'kerux.ai.io@gmail.com' ? 'admin' :
-              user.email === process.env.NEXT_PUBLIC_ADMIN_EMAIL ? 'admin' :
-              user.email === process.env.NEXT_PUBLIC_DEMO_EMAIL ? 'demo' : 'free',
-        subscriptionStatus: user.email === 'kerux.ai.io@gmail.com' ? 'active' : 'none',
-        referralLimit: user.email === 'kerux.ai.io@gmail.com' ? 999999 : 50, // Unlimited for creator
-        activeReferrals: 0,
-        fullName: user.displayName || "",
-        lastLogin: new Date(),
-      };
-      await setDoc(doc(db, "users", user.uid), userDoc);
-      window.location.href = '/chat';
+
+      // Check if user document already exists (user might be signing up again)
+      const userDocRef = doc(db, "users", user.uid);
+      const userDocSnap = await getDoc(userDocRef);
+
+      if (!userDocSnap.exists()) {
+        // Create new user document with trial
+        const userDoc: User = {
+          id: user.uid,
+          email: user.email || "",
+          role: 'user', // New OAuth users start as regular users
+          subscriptionStatus: 'trial',
+          referralLimit: 50,
+          activeReferrals: 0,
+          fullName: user.displayName || "",
+          trialEndsAt: new Date(Date.now() + 3 * 24 * 60 * 60 * 1000), // 3 days trial
+          lastLogin: new Date(),
+        };
+        await setDoc(userDocRef, userDoc);
+      }
+
+      window.location.href = '/subscription-landing';
     } catch (error) {
       console.error("Apple signup error:", error);
       alert("Apple signup failed");
@@ -174,21 +188,28 @@ export default function SignupPage() {
     try {
       const result = await signInWithPopup(auth, provider);
       const user = result.user;
-      // Save user to Firestore
-      const userDoc: User = {
-        id: user.uid,
-        email: user.email || "",
-        role: user.email === 'kerux.ai.io@gmail.com' ? 'admin' :
-              user.email === process.env.NEXT_PUBLIC_ADMIN_EMAIL ? 'admin' :
-              user.email === process.env.NEXT_PUBLIC_DEMO_EMAIL ? 'demo' : 'free',
-        subscriptionStatus: user.email === 'kerux.ai.io@gmail.com' ? 'active' : 'none',
-        referralLimit: user.email === 'kerux.ai.io@gmail.com' ? 999999 : 50, // Unlimited for creator
-        activeReferrals: 0,
-        fullName: user.displayName || "",
-        lastLogin: new Date(),
-      };
-      await setDoc(doc(db, "users", user.uid), userDoc);
-      window.location.href = '/chat';
+
+      // Check if user document already exists (user might be signing up again)
+      const userDocRef = doc(db, "users", user.uid);
+      const userDocSnap = await getDoc(userDocRef);
+
+      if (!userDocSnap.exists()) {
+        // Create new user document with trial
+        const userDoc: User = {
+          id: user.uid,
+          email: user.email || "",
+          role: 'user', // New OAuth users start as regular users
+          subscriptionStatus: 'trial',
+          referralLimit: 50,
+          activeReferrals: 0,
+          fullName: user.displayName || "",
+          trialEndsAt: new Date(Date.now() + 3 * 24 * 60 * 60 * 1000), // 3 days trial
+          lastLogin: new Date(),
+        };
+        await setDoc(userDocRef, userDoc);
+      }
+
+      window.location.href = '/subscription-landing';
     } catch (error) {
       console.error("GitHub signup error:", error);
       alert("GitHub signup failed");
